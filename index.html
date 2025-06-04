@@ -14,22 +14,38 @@
     #overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 5; }
     select, input { margin: 5px 0; width: 100%; padding: 5px; }
     button { padding: 5px 10px; margin: 5px 2px; }
+    .filter-box { margin: 20px; text-align: center; }
   </style>
 </head>
 <body>
 
 <h2 style="text-align:center; margin-top:20px;">Calendário de Agendamento - Auditórios EM</h2>
 
+<div class="filter-box">
+  <label for="filtroAudit">Filtrar por Auditório: </label>
+  <select id="filtroAudit">
+    <option value="">Todos</option>
+    <option>Auditório 1</option>
+    <option>Auditório 2</option>
+    <option>Auditório 3</option>
+    <option>Auditório 4</option>
+    <option>Auditório 5</option>
+    <option>Auditório 6</option>
+    <option>Auditório 7</option>
+    <option>Auditório Martins dos Santos</option>
+  </select>
+</div>
+
 <table id="agenda">
   <thead>
     <tr>
       <th>Hora</th>
-      <th>Segunda</th>
-      <th>Terça</th>
-      <th>Quarta</th>
-      <th>Quinta</th>
-      <th>Sexta</th>
-      <th>Sábado</th>
+      <th>Segunda<br><span id="d1"></span></th>
+      <th>Terça<br><span id="d2"></span></th>
+      <th>Quarta<br><span id="d3"></span></th>
+      <th>Quinta<br><span id="d4"></span></th>
+      <th>Sexta<br><span id="d5"></span></th>
+      <th>Sábado<br><span id="d6"></span></th>
     </tr>
   </thead>
   <tbody id="agenda-body"></tbody>
@@ -54,7 +70,7 @@
     <input type="hidden" id="eventoId">
     <div style="text-align:right;">
       <button type="submit">Salvar</button>
-      <button type="button" onclick="deletarEvento()">Apagar</button>
+      <button type="button" id="btnDeletar">Apagar</button>
       <button type="button" onclick="fecharModal()">Cancelar</button>
     </div>
   </form>
@@ -62,25 +78,24 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDRPP6hRmn_xWahS97aCEqt_5CzUFiQ6AQ",
     authDomain: "sistema-de-reservas-1671e.firebaseapp.com",
     projectId: "sistema-de-reservas-1671e",
-    storageBucket: "sistema-de-reservas-1671e.firebasestorage.app",
+    storageBucket: "sistema-de-reservas-1671e.appspot.com",
     messagingSenderId: "402405336089",
     appId: "1:402405336089:web:b7ab6693d68c20294d7688",
     measurementId: "G-ETNMXRLEJ6"
   };
+
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
   const agendaBody = document.getElementById("agenda-body");
   const horas = [];
-  for (let h = 7; h <= 20; h++) {
-    horas.push(`${h}:00`, `${h}:30`);
-  }
+  for (let h = 7; h <= 21; h++) horas.push(`${h}:00`, `${h}:30`);
 
   const celulas = {};
 
@@ -100,42 +115,29 @@
     agendaBody.appendChild(tr);
   });
 
-  let horaSelecionada, diaSelecionado, eventoSelecionadoId = null;
-
-  async function carregarEventos() {
-    const snap = await getDocs(collection(db, "agendamentos"));
-    snap.forEach(docSnap => {
-      const ev = docSnap.data();
-      const key = `${ev.dia}-${ev.hora}`;
-      if (celulas[key]) {
-        celulas[key].textContent = ev.titulo + " - " + ev.auditorio;
-        celulas[key].dataset.id = docSnap.id;
-      }
-    });
+  const diaHoje = new Date();
+  for (let i = 1; i <= 6; i++) {
+    const data = new Date(diaHoje);
+    data.setDate(data.getDate() + i - diaHoje.getDay());
+    const span = document.getElementById(`d${i}`);
+    if (span) span.textContent = data.toLocaleDateString('pt-PT');
   }
+
+  let eventoSelecionadoId = null;
 
   function abrirModal(hora, dia, id = null) {
     horaSelecionada = hora;
     diaSelecionado = dia;
     eventoSelecionadoId = id || null;
-    if (id) {
-      getDocs(collection(db, "agendamentos")).then(snapshot => {
-        snapshot.forEach(docSnap => {
-          if (docSnap.id === id) {
-            const ev = docSnap.data();
-            document.getElementById("titulo").value = ev.titulo;
-            document.getElementById("responsavel").value = ev.responsavel;
-            document.getElementById("auditorio").value = ev.auditorio;
-            document.getElementById("eventoId").value = id;
-          }
-        });
-      });
+    if (id && celulas[`${dia}-${hora}`].textContent.includes(" - ")) {
+      const [titulo, auditorio] = celulas[`${dia}-${hora}`].textContent.split(" - ");
+      document.getElementById("titulo").value = titulo.trim();
+      document.getElementById("auditorio").value = auditorio.trim();
     } else {
       document.getElementById("titulo").value = "";
       document.getElementById("responsavel").value = "";
-      document.getElementById("auditorio").value = "Auditório 1";
-      document.getElementById("eventoId").value = "";
     }
+    document.getElementById("eventoId").value = id || "";
     document.getElementById("overlay").style.display = "block";
     document.getElementById("modal").style.display = "block";
   }
@@ -145,15 +147,35 @@
     document.getElementById("modal").style.display = "none";
   }
 
-  async function deletarEvento() {
+  async function carregarEventos(filtro = "") {
+    const snap = await getDocs(collection(db, "agendamentos"));
+    snap.forEach(docSnap => {
+      const ev = docSnap.data();
+      const key = `${ev.dia}-${ev.hora}`;
+      if (celulas[key]) {
+        if (!filtro || ev.auditorio === filtro) {
+          celulas[key].textContent = `${ev.titulo} - ${ev.auditorio}`;
+          celulas[key].dataset.id = docSnap.id;
+        } else {
+          celulas[key].textContent = "";
+        }
+      }
+    });
+  }
+
+  document.getElementById("filtroAudit").addEventListener("change", e => {
+    carregarEventos(e.target.value);
+  });
+
+  document.getElementById("btnDeletar").addEventListener("click", async () => {
     const id = document.getElementById("eventoId").value;
     if (id) {
       await deleteDoc(doc(db, "agendamentos", id));
-      alert("Evento apagado");
+      alert("Evento apagado!");
       fecharModal();
       location.reload();
     }
-  }
+  });
 
   document.getElementById("eventForm").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -161,9 +183,7 @@
     const responsavel = document.getElementById("responsavel").value;
     const auditorio = document.getElementById("auditorio").value;
     const eventoId = document.getElementById("eventoId").value;
-    const dados = {
-      titulo, responsavel, auditorio, hora: horaSelecionada, dia: diaSelecionado, dataCriacao: new Date().toISOString()
-    };
+    const dados = { titulo, responsavel, auditorio, hora: horaSelecionada, dia: diaSelecionado, dataCriacao: new Date().toISOString() };
     try {
       if (eventoId) {
         await updateDoc(doc(db, "agendamentos", eventoId), dados);
