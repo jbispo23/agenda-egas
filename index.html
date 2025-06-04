@@ -10,10 +10,10 @@
     th, td { border: 1px solid #ccc; text-align: center; padding: 5px; }
     th { background-color: #00507A; color: white; }
     td:hover { background-color: #e0f7fa; cursor: pointer; }
-    #modal { display: none; position: fixed; top: 30%; left: 50%; transform: translate(-50%, -30%); background: white; padding: 20px; border: 2px solid #00507A; z-index: 10; }
+    #modal { display: none; position: fixed; top: 30%; left: 50%; transform: translate(-50%, -30%); background: white; padding: 20px; border: 2px solid #00507A; z-index: 10; width: 300px; }
     #overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 5; }
     select, input { margin: 5px 0; width: 100%; padding: 5px; }
-    button { padding: 5px 10px; }
+    button { padding: 5px 10px; margin: 5px 2px; }
   </style>
 </head>
 <body>
@@ -32,9 +32,7 @@
       <th>Sábado</th>
     </tr>
   </thead>
-  <tbody id="agenda-body">
-    <!-- Linhas serão inseridas por JS -->
-  </tbody>
+  <tbody id="agenda-body"></tbody>
 </table>
 
 <div id="overlay"></div>
@@ -53,14 +51,18 @@
       <option>Auditório 7</option>
       <option>Auditório Martins dos Santos</option>
     </select>
-    <button type="submit">Salvar</button>
-    <button type="button" onclick="fecharModal()">Cancelar</button>
+    <input type="hidden" id="eventoId">
+    <div style="text-align:right;">
+      <button type="submit">Salvar</button>
+      <button type="button" onclick="deletarEvento()">Apagar</button>
+      <button type="button" onclick="fecharModal()">Cancelar</button>
+    </div>
   </form>
 </div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-  import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, getDocs, query, where, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDRPP6hRmn_xWahS97aCEqt_5CzUFiQ6AQ",
@@ -79,24 +81,61 @@
   for (let h = 7; h <= 20; h++) {
     horas.push(`${h}:00`, `${h}:30`);
   }
+
+  const celulas = {};
+
   horas.forEach(hora => {
     const tr = document.createElement("tr");
     const th = document.createElement("td");
     th.textContent = hora;
     tr.appendChild(th);
-    for (let i = 1; i <= 6; i++) {
+    for (let dia = 1; dia <= 6; dia++) {
       const td = document.createElement("td");
-      td.onclick = () => abrirModal(hora, i);
+      td.dataset.hora = hora;
+      td.dataset.dia = dia;
+      td.onclick = () => abrirModal(hora, dia, td.dataset.id);
       tr.appendChild(td);
+      celulas[`${dia}-${hora}`] = td;
     }
     agendaBody.appendChild(tr);
   });
 
-  let horaSelecionada, diaSelecionado;
+  let horaSelecionada, diaSelecionado, eventoSelecionadoId = null;
 
-  function abrirModal(hora, dia) {
+  async function carregarEventos() {
+    const snap = await getDocs(collection(db, "agendamentos"));
+    snap.forEach(docSnap => {
+      const ev = docSnap.data();
+      const key = `${ev.dia}-${ev.hora}`;
+      if (celulas[key]) {
+        celulas[key].textContent = ev.titulo + " - " + ev.auditorio;
+        celulas[key].dataset.id = docSnap.id;
+      }
+    });
+  }
+
+  function abrirModal(hora, dia, id = null) {
     horaSelecionada = hora;
     diaSelecionado = dia;
+    eventoSelecionadoId = id || null;
+    if (id) {
+      getDocs(collection(db, "agendamentos")).then(snapshot => {
+        snapshot.forEach(docSnap => {
+          if (docSnap.id === id) {
+            const ev = docSnap.data();
+            document.getElementById("titulo").value = ev.titulo;
+            document.getElementById("responsavel").value = ev.responsavel;
+            document.getElementById("auditorio").value = ev.auditorio;
+            document.getElementById("eventoId").value = id;
+          }
+        });
+      });
+    } else {
+      document.getElementById("titulo").value = "";
+      document.getElementById("responsavel").value = "";
+      document.getElementById("auditorio").value = "Auditório 1";
+      document.getElementById("eventoId").value = "";
+    }
     document.getElementById("overlay").style.display = "block";
     document.getElementById("modal").style.display = "block";
   }
@@ -106,26 +145,40 @@
     document.getElementById("modal").style.display = "none";
   }
 
+  async function deletarEvento() {
+    const id = document.getElementById("eventoId").value;
+    if (id) {
+      await deleteDoc(doc(db, "agendamentos", id));
+      alert("Evento apagado");
+      fecharModal();
+      location.reload();
+    }
+  }
+
   document.getElementById("eventForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const titulo = document.getElementById("titulo").value;
     const responsavel = document.getElementById("responsavel").value;
     const auditorio = document.getElementById("auditorio").value;
+    const eventoId = document.getElementById("eventoId").value;
+    const dados = {
+      titulo, responsavel, auditorio, hora: horaSelecionada, dia: diaSelecionado, dataCriacao: new Date().toISOString()
+    };
     try {
-      await addDoc(collection(db, "agendamentos"), {
-        titulo,
-        responsavel,
-        auditorio,
-        hora: horaSelecionada,
-        dia: diaSelecionado,
-        dataCriacao: new Date().toISOString()
-      });
-      alert("Evento agendado!");
+      if (eventoId) {
+        await updateDoc(doc(db, "agendamentos", eventoId), dados);
+      } else {
+        await addDoc(collection(db, "agendamentos"), dados);
+      }
+      alert("Evento salvo!");
       fecharModal();
+      location.reload();
     } catch (error) {
-      alert("Erro ao salvar: " + error.message);
+      alert("Erro: " + error.message);
     }
   });
+
+  carregarEventos();
 </script>
 
 </body>
