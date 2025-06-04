@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Agenda Simples - Egas</title>
+  <title>Agenda - Egas Moniz</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
     h2 { text-align: center; }
@@ -20,11 +20,19 @@
     #modal {
       background: white; padding: 20px; border: 2px solid #00507A;
       top: 30%; left: 50%; transform: translate(-50%, -30%);
-      z-index: 10; width: 300px;
+      z-index: 10; width: 300px; position: fixed;
     }
     .nav-controls { text-align: center; margin: 10px; }
     select, input { margin: 5px 0; width: 100%; padding: 5px; }
     button { margin: 5px 2px; padding: 5px 10px; }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .close-btn {
+      background: transparent; border: none; font-size: 20px;
+      font-weight: bold; cursor: pointer;
+    }
+    label { font-weight: bold; display: block; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -52,10 +60,20 @@
 
 <div id="overlay"></div>
 <div id="modal">
-  <h3>Agendar</h3>
+  <div class="modal-header">
+    <h3>Agendar</h3>
+    <button class="close-btn" onclick="fecharModal()">×</button>
+  </div>
   <form id="form">
+    <label for="titulo">Título:</label>
     <input type="text" id="titulo" placeholder="Título do evento" required />
-    <input type="text" id="auditorio" placeholder="Auditório" required />
+
+    <label for="auditorio">Auditório:</label>
+    <select id="auditorio" required>
+      <option value="">Selecione...</option>
+      <option value="Martins dos Santos">Martins dos Santos</option>
+    </select>
+
     <input type="hidden" id="dataSelecionada" />
     <input type="hidden" id="horaSelecionada" />
     <div style="text-align:right;">
@@ -95,11 +113,13 @@
     const inicioSemana = new Date(baseDate);
     inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay() + 1);
 
+    const diasSemana = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
     for (let i = 0; i < 6; i++) {
       const dia = new Date(inicioSemana);
       dia.setDate(dia.getDate() + i);
       headers.push(dia);
-      document.getElementById("d" + (i+1)).textContent = dia.toLocaleDateString();
+      document.getElementById("d" + (i+1)).textContent = `${diasSemana[dia.getDay()]} - ${dia.toLocaleDateString()}`;
     }
 
     semanaTitulo.textContent = `Semana de ${headers[0].toLocaleDateString()} a ${headers[5].toLocaleDateString()}`;
