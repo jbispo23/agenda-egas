@@ -140,11 +140,11 @@
     const data = document.getElementById("dataSelecionada").value;
     const hora = document.getElementById("horaSelecionada").value;
     const id = document.getElementById("docId").value;
+   if (id) {
     const docRef = doc(db, "agendamentos", id);
-    if (id) {
-      await updateDoc(docRef, { titulo, auditorio, data, hora });
+    await updateDoc(docRef, { titulo, auditorio, data, hora });
     } else {
-      await addDoc(collection(db, "agendamentos"), { titulo, auditorio, data, hora });
+    await addDoc(collection(db, "agendamentos"), { titulo, auditorio, data, hora });
     }
     fecharModal();
     desenharTabela();
