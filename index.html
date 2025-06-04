@@ -3,8 +3,12 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8" />
-  <title>Calendário de Agendamentos - Egas Moniz</title>
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+  <title>Agenda - Egas Moniz</title>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore-compat.js"></script>
   <style>
     body {
       font-family: 'Segoe UI', sans-serif;
@@ -23,15 +27,32 @@
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
       padding: 15px;
     }
+    .fc-event-title {
+      white-space: normal !important;
+    }
+    .export-buttons {
+      text-align: center;
+      margin-top: 10px;
+    }
+    .export-buttons button {
+      margin: 0 5px;
+      padding: 6px 14px;
+      border: none;
+      border-radius: 4px;
+      background-color: #005aa7;
+      color: white;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <h1>Agenda dos Auditórios - Egas Moniz</h1>
+  <div class="export-buttons">
+    <button onclick="exportPDF()">Exportar PDF</button>
+    <button onclick="exportExcel()">Exportar Excel</button>
+  </div>
   <div id="calendar"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore-compat.js"></script>
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDRPP6hRmn_xWahS97aCEqt_5CzUFiQ6AQ",
@@ -65,32 +86,80 @@
               title: `${d.titulo} - ${d.auditorio}`,
               start: d.data + 'T' + d.hora,
               end: d.fim || d.data + 'T' + d.hora,
-              editable: true
+              extendedProps: { titulo: d.titulo, auditorio: d.auditorio }
             };
           });
           successCallback(eventos);
         },
         dateClick: function(info) {
-          const titulo = prompt("Título do evento:");
-          const auditorio = prompt("Auditório:");
-          if (titulo && auditorio) {
-            db.collection("agendamentos").add({
-              titulo,
-              auditorio,
-              data: info.dateStr.split("T")[0],
-              hora: info.dateStr.split("T")[1],
-              fim: null
-            }).then(() => location.reload());
-          }
+          Swal.fire({
+            title: 'Novo Evento',
+            html:
+              '<input id="swal-titulo" class="swal2-input" placeholder="Título">' +
+              '<input id="swal-auditorio" class="swal2-input" placeholder="Auditório">' +
+              '<input id="swal-fim" type="time" class="swal2-input" placeholder="Hora fim">',
+            focusConfirm: false,
+            preConfirm: () => {
+              const titulo = document.getElementById('swal-titulo').value;
+              const auditorio = document.getElementById('swal-auditorio').value;
+              const fim = document.getElementById('swal-fim').value;
+              return { titulo, auditorio, fim };
+            }
+          }).then((result) => {
+            if (result.isConfirmed) {
+              const dados = result.value;
+              const data = info.dateStr.split("T")[0];
+              const hora = info.dateStr.split("T")[1];
+              db.collection("agendamentos").add({
+                titulo: dados.titulo,
+                auditorio: dados.auditorio,
+                data,
+                hora,
+                fim: dados.fim ? data + 'T' + dados.fim : null
+              }).then(() => location.reload());
+            }
+          });
         },
         eventClick: function(info) {
-          if (confirm("Deseja remover este evento?")) {
-            db.collection("agendamentos").doc(info.event.id).delete().then(() => location.reload());
-          }
+          const evento = info.event;
+          Swal.fire({
+            title: 'Editar Evento',
+            html:
+              `<input id="swal-titulo" class="swal2-input" value="${evento.extendedProps.titulo}">` +
+              `<input id="swal-auditorio" class="swal2-input" value="${evento.extendedProps.auditorio}">`,
+            showCancelButton: true,
+            confirmButtonText: 'Salvar',
+            cancelButtonText: 'Apagar',
+            showDenyButton: true,
+            denyButtonText: 'Cancelar',
+            preConfirm: () => {
+              return {
+                titulo: document.getElementById('swal-titulo').value,
+                auditorio: document.getElementById('swal-auditorio').value
+              };
+            }
+          }).then((result) => {
+            if (result.isConfirmed) {
+              db.collection("agendamentos").doc(evento.id).update({
+                titulo: result.value.titulo,
+                auditorio: result.value.auditorio
+              }).then(() => location.reload());
+            } else if (result.dismiss === Swal.DismissReason.cancel) {
+              db.collection("agendamentos").doc(evento.id).delete().then(() => location.reload());
+            }
+          });
         }
       });
       calendar.render();
     });
+
+    function exportPDF() {
+      alert('Exportar para PDF ainda será implementado com jsPDF ou html2pdf.');
+    }
+
+    function exportExcel() {
+      alert('Exportar para Excel ainda será implementado com SheetJS ou TableExport.');
+    }
   </script>
 </body>
 </html>
