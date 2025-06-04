@@ -1,45 +1,50 @@
+
 <!DOCTYPE html>
 <html lang="pt">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Agenda - Reservas</title>
+  <title>Agenda Simples - Egas</title>
   <style>
-    body { font-family: sans-serif; margin: 0; padding: 0; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ccc; text-align: center; padding: 5px; }
+    body { font-family: sans-serif; padding: 20px; }
+    h2 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
     th { background-color: #00507A; color: white; }
     td:hover { background-color: #e0f7fa; cursor: pointer; }
-    #modal, #overlay { display: none; }
-    #modal {
-      position: fixed; top: 30%; left: 50%;
-      transform: translate(-50%, -30%);
-      background: white; padding: 20px;
-      border: 2px solid #00507A; z-index: 10; width: 300px;
-    }
+    #modal, #overlay { display: none; position: fixed; }
     #overlay {
-      position: fixed; top: 0; left: 0;
-      width: 100%; height: 100%;
+      top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.5); z-index: 5;
     }
+    #modal {
+      background: white; padding: 20px; border: 2px solid #00507A;
+      top: 30%; left: 50%; transform: translate(-50%, -30%);
+      z-index: 10; width: 300px;
+    }
+    .nav-controls { text-align: center; margin: 10px; }
     select, input { margin: 5px 0; width: 100%; padding: 5px; }
-    button { padding: 5px 10px; margin: 5px 2px; }
+    button { margin: 5px 2px; padding: 5px 10px; }
   </style>
 </head>
 <body>
 
-<h2 style="text-align:center; margin-top:20px;">Sistema de Reservas</h2>
+<h2 id="semanaTitulo">Agenda de Reservas</h2>
+<div class="nav-controls">
+  <button onclick="semanaAnterior()">⬅️ Semana anterior</button>
+  <button onclick="semanaSeguinte()">Semana seguinte ➡️</button>
+</div>
 
 <table id="agenda">
   <thead>
     <tr>
       <th>Hora</th>
-      <th>Segunda</th>
-      <th>Terça</th>
-      <th>Quarta</th>
-      <th>Quinta</th>
-      <th>Sexta</th>
-      <th>Sábado</th>
+      <th id="d1"></th>
+      <th id="d2"></th>
+      <th id="d3"></th>
+      <th id="d4"></th>
+      <th id="d5"></th>
+      <th id="d6"></th>
     </tr>
   </thead>
   <tbody id="agenda-body"></tbody>
@@ -47,17 +52,14 @@
 
 <div id="overlay"></div>
 <div id="modal">
-  <h3>Agendar Serviço</h3>
-  <form id="eventForm">
-    <input type="text" id="nome" placeholder="Nome" required />
-    <input type="email" id="email" placeholder="Email" required />
-    <input type="text" id="servico" placeholder="Serviço" required />
-    <input type="date" id="data" required />
-    <input type="time" id="hora" required />
-    <input type="hidden" id="eventoId" />
+  <h3>Agendar</h3>
+  <form id="form">
+    <input type="text" id="titulo" placeholder="Título do evento" required />
+    <input type="text" id="auditorio" placeholder="Auditório" required />
+    <input type="hidden" id="dataSelecionada" />
+    <input type="hidden" id="horaSelecionada" />
     <div style="text-align:right;">
       <button type="submit">Salvar</button>
-      <button type="button" onclick="deletarEvento()">Apagar</button>
       <button type="button" onclick="fecharModal()">Cancelar</button>
     </div>
   </form>
@@ -65,7 +67,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDRPP6hRmn_xWahS97aCEqt_5CzUFiQ6AQ",
@@ -73,33 +75,68 @@
     projectId: "sistema-de-reservas-1671e",
     storageBucket: "sistema-de-reservas-1671e.appspot.com",
     messagingSenderId: "402405336089",
-    appId: "1:402405336089:web:b7ab6693d68c20294d7688",
-    measurementId: "G-ETNMXRLEJ6"
+    appId: "1:402405336089:web:b7ab6693d68c20294d7688"
   };
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+
   const agendaBody = document.getElementById("agenda-body");
+  const semanaTitulo = document.getElementById("semanaTitulo");
+
+  let baseDate = new Date();
 
   const horas = [];
-  for (let h = 7; h <= 22; h++) horas.push(`${h}:00`, `${h}:30`);
+  for (let h = 7; h <= 22; h++) horas.push(`${String(h).padStart(2, '0')}:00`, `${String(h).padStart(2, '0')}:30`);
 
-  horas.forEach(hora => {
-    const tr = document.createElement("tr");
-    const th = document.createElement("td");
-    th.textContent = hora;
-    tr.appendChild(th);
-    for (let d = 1; d <= 6; d++) {
-      const td = document.createElement("td");
-      td.onclick = () => abrirModal(hora);
-      tr.appendChild(td);
+  function atualizarTabela() {
+    agendaBody.innerHTML = "";
+    const headers = [];
+    const inicioSemana = new Date(baseDate);
+    inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay() + 1);
+
+    for (let i = 0; i < 6; i++) {
+      const dia = new Date(inicioSemana);
+      dia.setDate(dia.getDate() + i);
+      headers.push(dia);
+      document.getElementById("d" + (i+1)).textContent = dia.toLocaleDateString();
     }
-    agendaBody.appendChild(tr);
-  });
 
-  function abrirModal(hora) {
-    document.getElementById("hora").value = hora;
-    document.getElementById("eventoId").value = "";
+    semanaTitulo.textContent = `Semana de ${headers[0].toLocaleDateString()} a ${headers[5].toLocaleDateString()}`;
+
+    horas.forEach(hora => {
+      const tr = document.createElement("tr");
+      const th = document.createElement("td");
+      th.textContent = hora;
+      tr.appendChild(th);
+
+      headers.forEach((data, idx) => {
+        const td = document.createElement("td");
+        td.dataset.data = data.toISOString().split("T")[0];
+        td.dataset.hora = hora;
+        td.onclick = () => abrirModal(td.dataset.data, hora);
+        tr.appendChild(td);
+      });
+
+      agendaBody.appendChild(tr);
+    });
+
+    carregarEventos(headers.map(d => d.toISOString().split("T")[0]));
+  }
+
+  function semanaAnterior() {
+    baseDate.setDate(baseDate.getDate() - 7);
+    atualizarTabela();
+  }
+
+  function semanaSeguinte() {
+    baseDate.setDate(baseDate.getDate() + 7);
+    atualizarTabela();
+  }
+
+  function abrirModal(data, hora) {
+    document.getElementById("dataSelecionada").value = data;
+    document.getElementById("horaSelecionada").value = hora;
     document.getElementById("overlay").style.display = "block";
     document.getElementById("modal").style.display = "block";
   }
@@ -109,57 +146,32 @@
     document.getElementById("modal").style.display = "none";
   }
 
-  async function deletarEvento() {
-    const id = document.getElementById("eventoId").value;
-    if (id) {
-      await deleteDoc(doc(db, "reservas", id));
-      alert("Evento apagado.");
-      fecharModal();
-      location.reload();
-    }
-  }
-
-  document.getElementById("eventForm").addEventListener("submit", async (e) => {
+  document.getElementById("form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const dados = {
-      nome: document.getElementById("nome").value,
-      email: document.getElementById("email").value,
-      servico: document.getElementById("servico").value,
-      data: document.getElementById("data").value,
-      hora: document.getElementById("hora").value,
-      status: "pendente"
+    const docData = {
+      titulo: document.getElementById("titulo").value,
+      auditorio: document.getElementById("auditorio").value,
+      data: document.getElementById("dataSelecionada").value,
+      hora: document.getElementById("horaSelecionada").value
     };
-    const id = document.getElementById("eventoId").value;
-    try {
-      if (id) {
-        await updateDoc(doc(db, "reservas", id), dados);
-      } else {
-        await addDoc(collection(db, "reservas"), dados);
-      }
-      alert("Evento salvo!");
-      fecharModal();
-      location.reload();
-    } catch (err) {
-      alert("Erro: " + err.message);
-    }
+    await addDoc(collection(db, "agendamentos"), docData);
+    alert("Evento salvo!");
+    fecharModal();
+    atualizarTabela();
   });
 
-  async function carregarEventos() {
-    const snap = await getDocs(collection(db, "reservas"));
+  async function carregarEventos(datas) {
+    const snap = await getDocs(collection(db, "agendamentos"));
     snap.forEach(docSnap => {
       const ev = docSnap.data();
-      const linha = Array.from(agendaBody.rows).find(r => r.cells[0].textContent === ev.hora);
-      if (linha) {
-        const cell = Array.from(linha.cells).find(c => !c.dataset.filled);
-        if (cell) {
-          cell.textContent = `${ev.nome} - ${ev.servico}`;
-          cell.dataset.filled = "1";
-        }
+      if (datas.includes(ev.data)) {
+        const celula = [...document.querySelectorAll(`[data-data='${ev.data}'][data-hora='${ev.hora}']`)][0];
+        if (celula) celula.textContent = ev.titulo + " - " + ev.auditorio;
       }
     });
   }
 
-  carregarEventos();
+  atualizarTabela();
 </script>
 
 </body>
