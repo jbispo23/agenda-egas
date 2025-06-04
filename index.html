@@ -1,4 +1,219 @@
 <!DOCTYPE html>
-<!-- HTML completo incluído na última resposta anterior (resumido aqui para não repetir visualmente) -->
-<!-- Inclui Firebase Firestore, agenda por semana, modal, exportação Excel e PDF -->
-<!-- Salva, edita e apaga eventos corretamente -->
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <title>Agenda de Reservas - Egas Moniz</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f7f7f7; }
+    h2 { text-align: center; }
+    .nav-controls, .export-buttons { text-align: center; margin: 10px; }
+    button { margin: 5px 4px; padding: 6px 10px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+    th { background-color: #00507A; color: white; }
+    td:hover { background-color: #e0f7fa; cursor: pointer; }
+    #modal, #overlay { display: none; position: fixed; }
+    #overlay {
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.4); z-index: 5;
+    }
+    #modal {
+      background: white; padding: 20px; border: 2px solid #00507A;
+      top: 25%; left: 50%; transform: translate(-50%, -25%);
+      z-index: 10; width: 300px;
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; }
+    .close-btn { background: transparent; border: none; font-size: 18px; font-weight: bold; cursor: pointer; }
+    label { display: block; margin-top: 10px; font-weight: bold; }
+    input, select { width: 100%; padding: 5px; margin-top: 2px; }
+    .modal-footer { text-align: right; margin-top: 10px; }
+    .modal-footer button { margin-left: 4px; }
+  </style>
+</head>
+<body>
+
+<h2 id="semanaTitulo">Agenda de Reservas</h2>
+
+<div class="nav-controls">
+  <button onclick="navegarSemana(-1)">⬅️ Semana anterior</button>
+  <button onclick="navegarSemana(1)">Semana seguinte ➡️</button>
+</div>
+
+<div class="export-buttons">
+  <button onclick="exportarExcel()">📊 Excel</button>
+  <button onclick="exportarPDF()">📄 PDF</button>
+</div>
+
+<table id="agenda">
+  <thead>
+    <tr>
+      <th>Hora</th>
+      <th id="d1"></th>
+      <th id="d2"></th>
+      <th id="d3"></th>
+      <th id="d4"></th>
+      <th id="d5"></th>
+      <th id="d6"></th>
+    </tr>
+  </thead>
+  <tbody id="agenda-body"></tbody>
+</table>
+
+<div id="overlay" onclick="fecharModal()"></div>
+<div id="modal">
+  <div class="modal-header">
+    <h3>Agendar</h3>
+    <button class="close-btn" onclick="fecharModal()">×</button>
+  </div>
+  <form id="form">
+    <label for="titulo">Título:</label>
+    <input type="text" id="titulo" required />
+    <label for="auditorio">Auditório:</label>
+    <select id="auditorio" required>
+      <option value="">Selecione...</option>
+      <option value="Martins dos Santos">Martins dos Santos</option>
+    </select>
+    <input type="hidden" id="dataSelecionada" />
+    <input type="hidden" id="horaSelecionada" />
+    <input type="hidden" id="docId" />
+    <div class="modal-footer">
+      <button type="submit">Salvar</button>
+      <button type="button" onclick="apagarEvento()">Apagar</button>
+      <button type="button" onclick="fecharModal()">Cancelar</button>
+    </div>
+  </form>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
+  import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDRPP6hRmn_xWahS97aCEqt_5CzUFiQ6AQ",
+    authDomain: "sistema-de-reservas-1671e.firebaseapp.com",
+    projectId: "sistema-de-reservas-1671e",
+    storageBucket: "sistema-de-reservas-1671e.appspot.com",
+    messagingSenderId: "402405336089",
+    appId: "1:402405336089:web:b7ab6693d68c20294d7688"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const tbody = document.getElementById("agenda-body");
+  const headers = [...Array(6)].map((_, i) => document.getElementById("d" + (i + 1)));
+  let baseDate = new Date();
+  let eventos = [];
+
+  const diasSemana = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+  const horas = Array.from({length: 31}, (_, i) => {
+    const h = 7 + Math.floor(i / 2);
+    return `${String(h).padStart(2, "0")}:${i % 2 ? "30" : "00"}`;
+  });
+
+  window.navegarSemana = (n) => {
+    baseDate.setDate(baseDate.getDate() + n * 7);
+    desenharTabela();
+  };
+
+  window.fecharModal = () => {
+    document.getElementById("overlay").style.display = "none";
+    document.getElementById("modal").style.display = "none";
+  };
+
+  function abrirModal(data, hora) {
+    const evento = eventos.find(ev => ev.data === data && ev.hora === hora);
+    document.getElementById("titulo").value = evento?.titulo || "";
+    document.getElementById("auditorio").value = evento?.auditorio || "";
+    document.getElementById("dataSelecionada").value = data;
+    document.getElementById("horaSelecionada").value = hora;
+    document.getElementById("docId").value = evento?.id || "";
+    document.getElementById("overlay").style.display = "block";
+    document.getElementById("modal").style.display = "block";
+  }
+
+  document.getElementById("form").onsubmit = async (e) => {
+    e.preventDefault();
+    const titulo = document.getElementById("titulo").value;
+    const auditorio = document.getElementById("auditorio").value;
+    const data = document.getElementById("dataSelecionada").value;
+    const hora = document.getElementById("horaSelecionada").value;
+    const id = document.getElementById("docId").value;
+    const docRef = doc(db, "agendamentos", id);
+    if (id) {
+      await updateDoc(docRef, { titulo, auditorio, data, hora });
+    } else {
+      await addDoc(collection(db, "agendamentos"), { titulo, auditorio, data, hora });
+    }
+    fecharModal();
+    desenharTabela();
+  };
+
+  window.apagarEvento = async () => {
+    const id = document.getElementById("docId").value;
+    if (id) {
+      await deleteDoc(doc(db, "agendamentos", id));
+      fecharModal();
+      desenharTabela();
+    }
+  };
+
+  async function desenharTabela() {
+    tbody.innerHTML = "";
+    const inicio = new Date(baseDate);
+    inicio.setDate(inicio.getDate() - inicio.getDay() + 1);
+    const datas = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(inicio);
+      d.setDate(d.getDate() + i);
+      const label = `${diasSemana[d.getDay()]} - ${d.toLocaleDateString()}`;
+      headers[i].textContent = label;
+      datas.push(d.toISOString().split("T")[0]);
+    }
+
+    document.getElementById("semanaTitulo").textContent = `Semana de ${datas[0]} a ${datas[5]}`;
+    const snap = await getDocs(collection(db, "agendamentos"));
+    eventos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    for (let hora of horas) {
+      const row = document.createElement("tr");
+      const th = document.createElement("td");
+      th.textContent = hora;
+      row.appendChild(th);
+
+      for (let data of datas) {
+        const td = document.createElement("td");
+        td.onclick = () => abrirModal(data, hora);
+        const ev = eventos.find(ev => ev.data === data && ev.hora === hora);
+        td.textContent = ev ? `${ev.titulo} - ${ev.auditorio}` : "";
+        row.appendChild(td);
+      }
+
+      tbody.appendChild(row);
+    }
+  }
+
+  window.exportarExcel = () => {
+    const wb = XLSX.utils.table_to_book(document.getElementById("agenda"), {sheet:"Agenda"});
+    XLSX.writeFile(wb, "agenda-egas.xlsx");
+  };
+
+  window.exportarPDF = () => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.text("Agenda de Reservas", 10, 10);
+    const table = document.getElementById("agenda");
+    let y = 20;
+    for (let row of table.rows) {
+      const text = [...row.cells].map(c => c.textContent).join(" | ");
+      doc.text(text, 10, y);
+      y += 10;
+    }
+    doc.save("agenda-egas.pdf");
+  };
+
+  desenharTabela();
+</script>
+</body>
+</html>
