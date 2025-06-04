@@ -58,7 +58,7 @@
   <tbody id="agenda-body"></tbody>
 </table>
 
-<div id="overlay"></div>
+<div id="overlay" onclick="fecharModal()"></div>
 <div id="modal">
   <div class="modal-header">
     <h3>Agendar</h3>
@@ -76,8 +76,10 @@
 
     <input type="hidden" id="dataSelecionada" />
     <input type="hidden" id="horaSelecionada" />
+    <input type="hidden" id="docId" />
     <div style="text-align:right;">
       <button type="submit">Salvar</button>
+      <button type="button" onclick="apagarEvento()">Apagar</button>
       <button type="button" onclick="fecharModal()">Cancelar</button>
     </div>
   </form>
@@ -85,7 +87,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDRPP6hRmn_xWahS97aCEqt_5CzUFiQ6AQ",
@@ -103,6 +105,7 @@
   const semanaTitulo = document.getElementById("semanaTitulo");
 
   let baseDate = new Date();
+  let eventosCache = [];
 
   const horas = [];
   for (let h = 7; h <= 22; h++) horas.push(`${String(h).padStart(2, '0')}:00`, `${String(h).padStart(2, '0')}:30`);
@@ -132,9 +135,10 @@
 
       headers.forEach((data, idx) => {
         const td = document.createElement("td");
-        td.dataset.data = data.toISOString().split("T")[0];
+        const dataISO = data.toISOString().split("T")[0];
+        td.dataset.data = dataISO;
         td.dataset.hora = hora;
-        td.onclick = () => abrirModal(td.dataset.data, hora);
+        td.onclick = () => abrirModal(dataISO, hora);
         tr.appendChild(td);
       });
 
@@ -155,8 +159,12 @@
   }
 
   function abrirModal(data, hora) {
+    const evento = eventosCache.find(ev => ev.data === data && ev.hora === hora);
     document.getElementById("dataSelecionada").value = data;
     document.getElementById("horaSelecionada").value = hora;
+    document.getElementById("titulo").value = evento ? evento.titulo : "";
+    document.getElementById("auditorio").value = evento ? evento.auditorio : "";
+    document.getElementById("docId").value = evento ? evento.id : "";
     document.getElementById("overlay").style.display = "block";
     document.getElementById("modal").style.display = "block";
   }
@@ -166,26 +174,45 @@
     document.getElementById("modal").style.display = "none";
   }
 
+  async function apagarEvento() {
+    const id = document.getElementById("docId").value;
+    if (id) {
+      await deleteDoc(doc(db, "agendamentos", id));
+      alert("Evento apagado!");
+      fecharModal();
+      atualizarTabela();
+    }
+  }
+
   document.getElementById("form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const docData = {
-      titulo: document.getElementById("titulo").value,
-      auditorio: document.getElementById("auditorio").value,
-      data: document.getElementById("dataSelecionada").value,
-      hora: document.getElementById("horaSelecionada").value
-    };
-    await addDoc(collection(db, "agendamentos"), docData);
-    alert("Evento salvo!");
+    const titulo = document.getElementById("titulo").value;
+    const auditorio = document.getElementById("auditorio").value;
+    const data = document.getElementById("dataSelecionada").value;
+    const hora = document.getElementById("horaSelecionada").value;
+    const id = document.getElementById("docId").value;
+
+    if (id) {
+      await updateDoc(doc(db, "agendamentos", id), { titulo, auditorio, data, hora });
+      alert("Evento atualizado!");
+    } else {
+      await addDoc(collection(db, "agendamentos"), { titulo, auditorio, data, hora });
+      alert("Evento salvo!");
+    }
+
     fecharModal();
     atualizarTabela();
   });
 
   async function carregarEventos(datas) {
+    eventosCache = [];
     const snap = await getDocs(collection(db, "agendamentos"));
     snap.forEach(docSnap => {
       const ev = docSnap.data();
+      ev.id = docSnap.id;
+      eventosCache.push(ev);
       if (datas.includes(ev.data)) {
-        const celula = [...document.querySelectorAll(`[data-data='${ev.data}'][data-hora='${ev.hora}']`)][0];
+        const celula = document.querySelector(`[data-data='${ev.data}'][data-hora='${ev.hora}']`);
         if (celula) celula.textContent = ev.titulo + " - " + ev.auditorio;
       }
     });
