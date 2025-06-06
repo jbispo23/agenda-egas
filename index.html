@@ -73,6 +73,7 @@
         allDaySlot: false,
         slotMinTime: "07:00:00",
         slotMaxTime: "22:00:00",
+        slotDuration: "00:30:00",
         editable: true,
         selectable: true,
         headerToolbar: {
@@ -105,6 +106,10 @@
                 '<option value="Auditório 2">Auditório 2</option>' +
               '</select>' +
               '<input id="swal-fim" type="time" class="swal2-input" placeholder="Hora fim">',
+            showCloseButton: true,
+            showCancelButton: true,
+            confirmButtonText: 'Salvar',
+            cancelButtonText: 'Cancelar',
             focusConfirm: false,
             preConfirm: () => {
               const titulo = document.getElementById('swal-titulo').value;
@@ -134,10 +139,11 @@
             html:
               `<input id="swal-titulo" class="swal2-input" value="${evento.extendedProps.titulo}">` +
               `<input id="swal-auditorio" class="swal2-input" value="${evento.extendedProps.auditorio}">`,
+            showCloseButton: true,
             showCancelButton: true,
+            showDenyButton: true,
             confirmButtonText: 'Salvar',
             cancelButtonText: 'Apagar',
-            showDenyButton: true,
             denyButtonText: 'Cancelar',
             preConfirm: () => {
               return {
