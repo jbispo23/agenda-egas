@@ -2,196 +2,121 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8" />
-  <title>Agenda - Egas Moniz</title>
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
+  <title>Agenda de Reservas</title>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore-compat.js"></script>
   <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background: #f4f7fa;
-      padding: 20px;
-    }
-    h1 {
-      text-align: center;
-      color: #003366;
-    }
-    #calendar {
-      max-width: 95%;
-      margin: 40px auto;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      padding: 15px;
-    }
-    .fc-event-title {
-      white-space: normal !important;
-    }
-    .export-buttons {
-      text-align: center;
-      margin-top: 10px;
-    }
-    .export-buttons button {
-      margin: 0 5px;
-      padding: 6px 14px;
-      border: none;
-      border-radius: 4px;
-      background-color: #005aa7;
-      color: white;
-      cursor: pointer;
-    }
+    body { font-family: sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+    #calendar { max-width: 95%; margin: auto; background: white; padding: 10px; border-radius: 8px; }
+    #filtros { margin: 20px auto; text-align: center; }
+    select { padding: 5px 10px; font-size: 16px; }
+    .fc-event-title { white-space: normal; }
   </style>
 </head>
 <body>
-  <h1>Agenda dos Auditórios - Egas Moniz</h1>
-  <div class="export-buttons">
-    <button onclick="exportPDF()">Exportar PDF</button>
-    <button onclick="exportExcel()">Exportar Excel</button>
+  <h2 style="text-align:center;">Agenda de Reservas</h2>
+  <div id="filtros">
+    <label for="auditorio">Filtrar por auditório: </label>
+    <select id="filtroAuditorio">
+      <option>Todos</option>
+      <option>Martins dos Santos</option>
+      <option>Auditório 2</option>
+      <option>Auditório 3</option>
+    </select>
   </div>
+
   <div id="calendar"></div>
 
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getFirestore, collection, getDocs, addDoc, deleteDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
     const firebaseConfig = {
       apiKey: "AIzaSyDRPP6hRmn_xWahS97aCEqt_5CzUFiQ6AQ",
       authDomain: "sistema-de-reservas-1671e.firebaseapp.com",
-      projectId: "sistema-de-reservas-1671e"
+      projectId: "sistema-de-reservas-1671e",
+      storageBucket: "sistema-de-reservas-1671e.appspot.com",
+      messagingSenderId: "402405336089",
+      appId: "1:402405336089:web:b7ab6693d68c20294d7688"
     };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
 
-    let eventosGlobal = [];
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-    document.addEventListener('DOMContentLoaded', async function () {
-      const calendarEl = document.getElementById('calendar');
-      const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'timeGridWeek',
-        locale: 'pt',
-        allDaySlot: false,
-        slotMinTime: "07:00:00",
-        slotMaxTime: "22:00:00",
-        slotDuration: "00:30:00",
-        editable: true,
-        selectable: true,
-        headerToolbar: {
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay'
-        },
-        events: async function(fetchInfo, successCallback, failureCallback) {
-          const snapshot = await db.collection("agendamentos").get();
-          eventosGlobal = snapshot.docs.map(doc => {
-            const d = doc.data();
-            return {
-              id: doc.id,
-              title: `${d.titulo} - ${d.auditorio}`,
-              start: d.data + 'T' + d.hora,
-              end: d.fim || d.data + 'T' + d.hora,
-              extendedProps: { titulo: d.titulo, auditorio: d.auditorio }
-            };
-          });
-          successCallback(eventosGlobal);
-        },
-        dateClick: function(info) {
-          Swal.fire({
-            title: 'Novo Evento',
-            html:
-              '<input id="swal-titulo" class="swal2-input" placeholder="Título">' +
-              '<select id="swal-auditorio" class="swal2-input">' +
-                '<option value="Martins dos Santos">Martins dos Santos</option>' +
-                '<option value="Auditório 1">Auditório 1</option>' +
-                '<option value="Auditório 2">Auditório 2</option>' +
-              '</select>' +
-              '<input id="swal-fim" type="time" class="swal2-input" placeholder="Hora fim">',
-            showCloseButton: true,
-            showCancelButton: true,
-            confirmButtonText: 'Salvar',
-            cancelButtonText: 'Cancelar',
-            focusConfirm: false,
-            preConfirm: () => {
-              const titulo = document.getElementById('swal-titulo').value;
-              const auditorio = document.getElementById('swal-auditorio').value;
-              const fim = document.getElementById('swal-fim').value;
-              return { titulo, auditorio, fim };
-            }
-          }).then((result) => {
-            if (result.isConfirmed) {
-              const dados = result.value;
-              const data = info.dateStr.split("T")[0];
-              const hora = info.dateStr.split("T")[1];
-              db.collection("agendamentos").add({
-                titulo: dados.titulo,
-                auditorio: dados.auditorio,
-                data,
-                hora,
-                fim: dados.fim ? data + 'T' + dados.fim : null
-              }).then(() => location.reload());
-            }
-          });
-        },
-        eventClick: function(info) {
-          const evento = info.event;
-          Swal.fire({
-            title: 'Editar Evento',
-            html:
-              `<input id="swal-titulo" class="swal2-input" value="${evento.extendedProps.titulo}">` +
-              `<input id="swal-auditorio" class="swal2-input" value="${evento.extendedProps.auditorio}">`,
-            showCloseButton: true,
-            showCancelButton: true,
-            showDenyButton: true,
-            confirmButtonText: 'Salvar',
-            cancelButtonText: 'Apagar',
-            denyButtonText: 'Cancelar',
-            preConfirm: () => {
-              return {
-                titulo: document.getElementById('swal-titulo').value,
-                auditorio: document.getElementById('swal-auditorio').value
-              };
-            }
-          }).then((result) => {
-            if (result.isConfirmed) {
-              db.collection("agendamentos").doc(evento.id).update({
-                titulo: result.value.titulo,
-                auditorio: result.value.auditorio
-              }).then(() => location.reload());
-            } else if (result.dismiss === Swal.DismissReason.cancel) {
-              db.collection("agendamentos").doc(evento.id).delete().then(() => location.reload());
-            }
-          });
-        }
-      });
-      calendar.render();
+    let selectedAuditorio = "Todos";
+
+    function corDoAuditorio(nome) {
+      switch (nome) {
+        case "Martins dos Santos": return "#007bff";
+        case "Auditório 2": return "#28a745";
+        case "Auditório 3": return "#ffc107";
+        default: return "#6c757d";
+      }
+    }
+
+    document.getElementById("filtroAuditorio").addEventListener("change", function () {
+      selectedAuditorio = this.value;
+      calendar.refetchEvents();
     });
 
-    function exportExcel() {
-      const ws = XLSX.utils.json_to_sheet(eventosGlobal.map(e => ({
-        Titulo: e.extendedProps.titulo,
-        Auditório: e.extendedProps.auditorio,
-        Início: e.start,
-        Fim: e.end
-      })));
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Agendamentos");
-      XLSX.writeFile(wb, "agendamentos.xlsx");
-    }
+    const calendar = new FullCalendar.Calendar(document.getElementById("calendar"), {
+      initialView: "timeGridWeek",
+      locale: "pt",
+      allDaySlot: false,
+      slotMinTime: "07:00:00",
+      slotMaxTime: "22:00:00",
+      slotDuration: "00:30:00",
+      selectable: true,
+      editable: true,
+      eventOverlap: true,
+      headerToolbar: {
+        left: "prev,next today",
+        center: "title",
+        right: "timeGridWeek,timeGridDay"
+      },
+      events: async function (fetchInfo, successCallback, failureCallback) {
+        try {
+          const querySnapshot = await getDocs(collection(db, "agendamentos"));
+          const eventos = querySnapshot.docs.map(docSnap => {
+            const d = docSnap.data();
+            if (selectedAuditorio !== "Todos" && d.auditorio !== selectedAuditorio) return null;
+            return {
+              id: docSnap.id,
+              title: `${d.titulo} - ${d.auditorio}`,
+              start: d.start,
+              end: d.end,
+              color: corDoAuditorio(d.auditorio)
+            };
+          }).filter(Boolean);
+          successCallback(eventos);
+        } catch (e) {
+          failureCallback(e);
+        }
+      },
+      select: async function (info) {
+        const titulo = prompt("Título do evento:");
+        if (!titulo) return;
+        const auditorio = prompt("Auditório:");
+        if (!auditorio) return;
+        await addDoc(collection(db, "agendamentos"), {
+          titulo,
+          auditorio,
+          start: info.startStr,
+          end: info.endStr
+        });
+        calendar.refetchEvents();
+      },
+      eventClick: async function (info) {
+        if (confirm("Deseja apagar este evento?")) {
+          await deleteDoc(doc(db, "agendamentos", info.event.id));
+          calendar.refetchEvents();
+        }
+      }
+    });
 
-    function exportPDF() {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      let y = 10;
-      doc.setFontSize(12);
-      eventosGlobal.forEach(ev => {
-        doc.text(`Titulo: ${ev.extendedProps.titulo}`, 10, y);
-        doc.text(`Auditório: ${ev.extendedProps.auditorio}`, 10, y + 6);
-        doc.text(`Início: ${ev.start}`, 10, y + 12);
-        doc.text(`Fim: ${ev.end}`, 10, y + 18);
-        y += 28;
-      });
-      doc.save("agendamentos.pdf");
-    }
+    calendar.render();
   </script>
 </body>
 </html>
