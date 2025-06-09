@@ -1,71 +1,32 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Agenda Egas Moniz</title>
-
-  <!-- FullCalendar CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agenda de Reservas</title>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.0/main.min.css" rel="stylesheet" />
   <style>
-    body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f5f5f5; }
-    #calendar { max-width: 1100px; margin: 40px auto; background: #fff; padding: 10px; border-radius: 12px; }
-    #filtroAuditorio {
-      margin: 0 auto; display: block; font-size: 16px; padding: 6px;
-      border-radius: 6px; border: 1px solid #ccc;
-    }
-    .modal {
-      display: none; position: fixed; z-index: 1000; left: 0; top: 0;
-      width: 100%; height: 100%; background: rgba(0,0,0,0.5);
-    }
-    .modal-content {
-      background-color: #fff; margin: 10% auto; padding: 20px;
-      border: 1px solid #888; width: 300px; border-radius: 8px;
-    }
-    .modal-content input, .modal-content select {
-      width: 100%; padding: 8px; margin-bottom: 10px;
-    }
-    .modal-content button {
-      padding: 8px 12px; margin-right: 8px;
-    }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 0; margin: 0; }
+    h2 { text-align: center; margin-top: 20px; }
+    #calendar { max-width: 90%; margin: 30px auto; background: #fff; padding: 20px; border-radius: 10px; }
+    #filtroAuditorio { display: block; margin: 0 auto; margin-top: 10px; padding: 6px 10px; }
   </style>
 </head>
 <body>
-
-  <h2 style="text-align: center;">Agenda de Reservas</h2>
+  <h2>Agenda de Reservas</h2>
   <select id="filtroAuditorio">
     <option value="">Todos os auditórios</option>
     <option value="Martins dos Santos">Martins dos Santos</option>
-    <option value="Auditório 1">Auditório 1</option>
     <option value="Auditório 2">Auditório 2</option>
+    <option value="Auditório 3">Auditório 3</option>
   </select>
 
   <div id="calendar"></div>
 
-  <div class="modal" id="eventoModal">
-    <div class="modal-content">
-      <h3 id="modalTitulo">Novo Evento</h3>
-      <input type="text" id="tituloEvento" placeholder="Título do evento" />
-      <select id="auditórioEvento">
-        <option value="Martins dos Santos">Martins dos Santos</option>
-        <option value="Auditório 1">Auditório 1</option>
-        <option value="Auditório 2">Auditório 2</option>
-      </select>
-      <input type="time" id="horaFimEvento" />
-      <button onclick="salvarEvento()">Salvar</button>
-      <button onclick="apagarEvento()">Apagar</button>
-      <button onclick="fecharModal()">Cancelar</button>
-    </div>
-  </div>
-
-  <!-- Firebase -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-    import {
-      getFirestore, collection, getDocs, addDoc, deleteDoc,
-      doc, query, where
-    } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
-
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.0/main.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDRPP6hRmn_xWahS97aCEqt_5CzUFiQ6AQ",
       authDomain: "sistema-de-reservas-1671e.firebaseapp.com",
@@ -76,111 +37,78 @@
       measurementId: "G-ETNMXRLEJ6"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    let calendar;
-    let eventoSelecionado = null;
+    const coresPorAuditorio = {
+      "Martins dos Santos": "#3a87ad",
+      "Auditório 2": "#28a745",
+      "Auditório 3": "#dc3545"
+    };
 
-    document.addEventListener("DOMContentLoaded", async function () {
-      const { Calendar } = await import("https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js");
+    document.addEventListener('DOMContentLoaded', async function () {
+      const calendarEl = document.getElementById('calendar');
+      const filtro = document.getElementById('filtroAuditorio');
 
-      calendar = new Calendar(document.getElementById("calendar"), {
-        initialView: "timeGridWeek",
-        allDaySlot: false,
-        slotMinTime: "07:00:00",
-        slotMaxTime: "22:00:00",
-        locale: "pt",
-        editable: false,
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        locale: 'pt-br',
         selectable: true,
-        eventClick: function (info) {
-          eventoSelecionado = info.event;
-          document.getElementById("tituloEvento").value = info.event.title;
-          document.getElementById("auditórioEvento").value = info.event.extendedProps.auditório;
-          document.getElementById("horaFimEvento").value = info.event.endStr.split("T")[1].slice(0,5);
-          document.getElementById("eventoModal").style.display = "block";
+        editable: true,
+        height: "auto",
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,timeGridWeek,timeGridDay'
         },
-        select: function (info) {
-          eventoSelecionado = {
-            start: info.startStr,
-            end: info.endStr
-          };
-          document.getElementById("tituloEvento").value = "";
-          document.getElementById("auditórioEvento").value = "Martins dos Santos";
-          document.getElementById("horaFimEvento").value = info.endStr.split("T")[1].slice(0,5);
-          document.getElementById("eventoModal").style.display = "block";
-        },
-        events: async function (fetchInfo, successCallback, failureCallback) {
-          const filtro = document.getElementById("filtroAuditorio").value;
-          let q = filtro
-            ? query(collection(db, "agendamentos"), where("auditório", "==", filtro))
-            : collection(db, "agendamentos");
+        select: async function (info) {
+          const titulo = prompt("Título do evento:");
+          if (!titulo) return;
 
-          const snap = await getDocs(q);
-          const eventos = [];
-          snap.forEach(doc => {
-            const data = doc.data();
-            eventos.push({
-              id: doc.id,
-              title: `${data.título} - ${data.auditório}`,
-              start: data.inicio,
-              end: data.fim,
-              backgroundColor: data.auditório === "Martins dos Santos" ? "#3366cc" :
-                              data.auditório === "Auditório 1" ? "#009688" :
-                              data.auditório === "Auditório 2" ? "#8e44ad" : "#3f51b5",
-              extendedProps: {
-                auditório: data.auditório,
-              }
-            });
+          const auditorio = prompt("Nome do auditório:");
+          if (!auditorio) return;
+
+          await db.collection("agendamentos").add({
+            title: `${titulo} - ${auditorio}`,
+            start: info.startStr,
+            end: info.endStr,
+            auditorio: auditorio
           });
-          successCallback(eventos);
-        }
+          carregarEventos();
+        },
+        eventClick: async function(info) {
+          if (confirm("Deseja apagar este evento?")) {
+            const eventos = await db.collection("agendamentos").where("start", "==", info.event.start.toISOString()).get();
+            eventos.forEach(doc => doc.ref.delete());
+            info.event.remove();
+          }
+        },
+        events: []
       });
 
       calendar.render();
 
-      document.getElementById("filtroAuditorio").addEventListener("change", () => {
-        calendar.refetchEvents();
-      });
+      async function carregarEventos() {
+        const snapshot = await db.collection("agendamentos").get();
+        const eventos = snapshot.docs.map(doc => {
+          const dados = doc.data();
+          return {
+            title: dados.title,
+            start: dados.start,
+            end: dados.end,
+            backgroundColor: coresPorAuditorio[dados.auditorio] || '#999'
+          };
+        });
+
+        const filtroVal = filtro.value;
+        const filtrados = filtroVal ? eventos.filter(ev => ev.title.includes(filtroVal)) : eventos;
+        calendar.removeAllEvents();
+        calendar.addEventSource(filtrados);
+      }
+
+      filtro.addEventListener("change", carregarEventos);
+      carregarEventos();
     });
-
-    async function salvarEvento() {
-      const titulo = document.getElementById("tituloEvento").value;
-      const auditorio = document.getElementById("auditórioEvento").value;
-      const horaFim = document.getElementById("horaFimEvento").value;
-
-      if (!titulo || !horaFim) return alert("Preencha todos os campos");
-
-      if (eventoSelecionado.id) {
-        await deleteDoc(doc(db, "agendamentos", eventoSelecionado.id));
-      }
-
-      const dataInicio = eventoSelecionado.start;
-      const fimCompleto = dataInicio.split("T")[0] + "T" + horaFim + ":00";
-
-      await addDoc(collection(db, "agendamentos"), {
-        título: titulo,
-        auditório: auditorio,
-        inicio: dataInicio,
-        fim: fimCompleto,
-      });
-
-      fecharModal();
-      calendar.refetchEvents();
-    }
-
-    async function apagarEvento() {
-      if (eventoSelecionado?.id) {
-        await deleteDoc(doc(db, "agendamentos", eventoSelecionado.id));
-        fecharModal();
-        calendar.refetchEvents();
-      }
-    }
-
-    function fecharModal() {
-      eventoSelecionado = null;
-      document.getElementById("eventoModal").style.display = "none";
-    }
   </script>
 </body>
 </html>
